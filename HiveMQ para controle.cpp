@@ -3,24 +3,22 @@
 #include <WiFiClientSecure.h>
 
 //---- WiFi settings
-const char* ssid = "INTELBRAS - JOAO";
-const char* password = "jps510123";
+const char* ssid = "INTELBRAS - JOAO";  // Nome da rede WiFi
+const char* password = "jps510123";     // Senha da rede WiFi
 
 //---- MQTT Broker settings
-const char* mqtt_server = "7dd00b83fbea48e0badd8d23a4f2643a.s1.eu.hivemq.cloud"; 
-const char* mqtt_username = "pedroteste";
-const char* mqtt_password = "Pedro510123.";
-const int mqtt_port = 8883;
+const char* mqtt_server = "xxxx"; // Seu server MQTT do HiveMQ
+const char* mqtt_username = "xxxx"; // Nome de usuário MQTT
+const char* mqtt_password = "xxxx"; // Senha MQTT
+const int mqtt_port = 8883; // Porta do broker MQTT
 
-WiFiClientSecure espClient;
-PubSubClient client(espClient);
-unsigned long lastMsg = 0;
+WiFiClientSecure espClient; // Cliente seguro para WiFi
+PubSubClient client(espClient); // Cliente MQTT usando o cliente seguro
 
-#define MSG_BUFFER_SIZE (50)
-char msg[MSG_BUFFER_SIZE];
+#define MSG_BUFFER_SIZE (50) // Tamanho do buffer de mensagem
+char msg[MSG_BUFFER_SIZE];  // Buffer para armazenar mensagens
 
-// Definição do pino 2 para controle do LED
-const int gpio2 = 2;
+const int gpio2 = 2; // Pino para o controle do LED
 const char* led_topic = "ledControl"; // Tópico MQTT para controlar o LED
 
 static const char *root_ca PROGMEM = R"EOF(
@@ -57,76 +55,60 @@ emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
 -----END CERTIFICATE-----
 )EOF";
 
-// Declaração das funções callback e reconnect antes de serem usadas
+// Declaração das funções
 void callback(char* topic, byte* payload, unsigned int length);
 void reconnect();
 
 void setup() {
-  Serial.begin(9600);
-  Serial.print("\nConnecting to ");
-  Serial.println(ssid);
+  Serial.begin(9600); // Inicializa a comunicação serial
 
-  // Configuração do pino 2
-  pinMode(gpio2, OUTPUT);
-  digitalWrite(gpio2, LOW); // Começa com o LED apagado
+  pinMode(gpio2, OUTPUT); // Configura o pino do LED como saída
+  digitalWrite(gpio2, LOW); // Garante que o LED está apagado
 
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
+  WiFi.mode(WIFI_STA); // Configura o modo WiFi como estação
+  WiFi.begin(ssid, password); // Conecta-se à rede WiFi
 
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+    delay(500); // Espera até estar conectado
   }
 
-  Serial.println("\nWiFi connected\nIP address: ");
-  Serial.println(WiFi.localIP());
-
-  espClient.setCACert(root_ca);
-  client.setServer(mqtt_server, mqtt_port);
-  client.setCallback(callback); // Agora a função callback foi declarada
+  espClient.setCACert(root_ca); // Configura o certificado CA
+  client.setServer(mqtt_server, mqtt_port); // Configura o servidor MQTT
+  client.setCallback(callback); // Define a função de callback para mensagens MQTT
 }
 
 void loop() {
   if (!client.connected()) {
-    reconnect(); // Agora a função reconnect foi declarada
+    reconnect(); // Tenta reconectar ao MQTT se desconectado
   }
-  client.loop();
+  client.loop(); // Mantém a comunicação MQTT
 }
 
-// Função de reconexão ao MQTT
+// Função para reconectar ao broker MQTT
 void reconnect() {
   while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
     String clientId = "ESP32Client-";
     clientId += String(random(0xffff), HEX);
     if (client.connect(clientId.c_str(), mqtt_username, mqtt_password)) {
-      Serial.println("connected");
-      client.subscribe(led_topic); // Inscreve-se no tópico para controlar o LED
+      client.subscribe(led_topic); // Inscreve-se no tópico do LED
     } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      delay(5000);
+      delay(5000); // Espera antes de tentar novamente
     }
   }
 }
 
-// Função de callback chamada quando uma mensagem MQTT é recebida
+// Função chamada quando uma mensagem MQTT é recebida
 void callback(char* topic, byte* payload, unsigned int length) {
   String incommingMessage = "";
   for (int i = 0; i < length; i++) {
-    incommingMessage += (char)payload[i];
+    incommingMessage += (char)payload[i]; // Converte o payload para string
   }
-  Serial.println("Message arrived [" + String(topic) + "]: " + incommingMessage);
 
-  // Controle do LED com base no payload
-  if (String(topic) == led_topic) {
+  if (String(topic) == led_topic) { // Verifica se a mensagem é para o tópico do LED
     if (incommingMessage == "ON") {
       digitalWrite(gpio2, HIGH);  // Liga o LED
-      Serial.println("LED ligado");
     } else if (incommingMessage == "OFF") {
       digitalWrite(gpio2, LOW);   // Desliga o LED
-      Serial.println("LED desligado");
     }
   }
 }
