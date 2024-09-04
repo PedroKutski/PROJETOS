@@ -1,0 +1,86 @@
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <Update.h>
+
+const char* ssid = "INTELBRAS - JOAO";
+const char* password = "jps510123";
+const char* mqtt_server = "18dd6a02029d4d7781deed1e012e3fc2.s1.eu.hivemq.cloud";
+const char* mqtt_username = "pedroteste";
+const char* mqtt_password = "Pedro510123.";
+const int mqtt_port = 8883;
+const char* firmware_base_url = "https://raw.githubusercontent.com/PedroKutski/TESTES/main/";
+const int ledPin = 2;
+
+WiFiClientSecure espClient;
+PubSubClient mqttClient(espClient);
+
+// Forward declarations
+void reconnectToMQTT();
+void mqttCallback(char* topic, byte* payload, unsigned int length);
+void blinkLED(int times, int delayTime);
+void downloadFirmware(const String& filename);
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(ledPin, OUTPUT);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) delay(500);
+  espClient.setInsecure();
+  mqttClient.setServer(mqtt_server, mqtt_port);
+  mqttClient.setCallback(mqttCallback);
+}
+
+void loop() {
+  if (!mqttClient.connected()) reconnectToMQTT();
+  mqttClient.loop();
+}
+
+void reconnectToMQTT() {
+  while (!mqttClient.connected()) {
+    if (mqttClient.connect("ESP32Client", mqtt_username, mqtt_password)) {
+      mqttClient.subscribe("firmgit");
+    } else {
+      delay(5000);
+    }
+  }
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  String message = String((char*)payload).substring(0, length);
+  if (String(topic) == "firmgit") {
+    blinkLED(3, 500);
+    downloadFirmware(message);
+  }
+}
+
+void blinkLED(int times, int delayTime) {
+  for (int i = 0; i < times; i++) {
+    digitalWrite(ledPin, HIGH);
+    delay(delayTime);
+    digitalWrite(ledPin, LOW);
+    delay(delayTime);
+  }
+}
+
+void downloadFirmware(const String& filename) {
+  String firmwareUrl = firmware_base_url + filename;
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.begin(client, firmwareUrl);
+  int httpCode = http.GET();
+
+  if (httpCode == HTTP_CODE_OK) {
+    int contentLength = http.getSize();
+    if (contentLength > 0 && Update.begin(contentLength)) {
+      size_t written = Update.writeStream(*http.getStreamPtr());
+      if (written == contentLength && Update.end() && Update.isFinished()) {
+        blinkLED(1, 3000);
+        ESP.restart();
+      }
+    }
+  }
+  http.end();
+}
