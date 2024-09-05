@@ -1,57 +1,56 @@
-#include <WiFi.h>
-#include <PubSubClient.h>
-#include <WiFiClientSecure.h>
-#include <HTTPClient.h>
-#include <Update.h>
+#include <WiFi.h> // Biblioteca para conectar ao WiFi
+#include <PubSubClient.h> // Biblioteca para comunicação MQTT
+#include <WiFiClientSecure.h> // Biblioteca para comunicação segura via WiFi
+#include <HTTPClient.h> // Biblioteca para fazer requisições HTTP
+#include <Update.h> // Biblioteca para atualizar o firmware
 
 // Credenciais da rede WiFi
 const char* ssid = "INTELBRAS - JOAO";
 const char* password = "jps510123";
 
-// Detalhes do servidor MQTT
+// Credenciais do servidor MQTT
 const char* mqtt_server = "18dd6a02029d4d7781deed1e012e3fc2.s1.eu.hivemq.cloud";
 const char* mqtt_username = "pedroteste";
 const char* mqtt_password = "Pedro510123.";
 const int mqtt_port = 8883;
 
-// URL base para atualizações de firmware
+// URL base para download do firmware
 const char* firmware_base_url = "https://raw.githubusercontent.com/PedroKutski/TESTES/main/";
 
 // Pino do LED
 const int ledPin = 2;
 
-// Clientes WiFi e MQTT
+// Objetos para comunicação segura e MQTT
 WiFiClientSecure espClient;
 PubSubClient mqttClient(espClient);
 
-// Declarações de funções
+// Declaração antecipada das funções
 void reconnectToMQTT();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void blinkLED(int times, int delayTime);
 void downloadFirmware(const String& filename);
 
 void setup() {
-  Serial.begin(9600); // Inicializa a comunicação serial a 9600 bps
+  Serial.begin(9600); // Inicializa a comunicação serial
   pinMode(ledPin, OUTPUT); // Define o pino do LED como saída
-  WiFi.begin(ssid, password); // Conecta-se à rede WiFi
-  while (WiFi.status() != WL_CONNECTED) delay(500); // Aguarda a conexão
-  espClient.setInsecure(); // Desabilita a verificação do certificado SSL
-  mqttClient.setServer(mqtt_server, mqtt_port); // Define o servidor e a porta MQTT
-  mqttClient.setCallback(mqttCallback); // Define a função de callback do MQTT
+  WiFi.begin(ssid, password); // Conecta ao WiFi
+  while (WiFi.status() != WL_CONNECTED) delay(500); // Espera até conectar
+  espClient.setInsecure(); // Configura a conexão segura como insegura (sem verificação de certificado)
+  mqttClient.setServer(mqtt_server, mqtt_port); // Configura o servidor MQTT
+  mqttClient.setCallback(mqttCallback); // Define a função de callback para o MQTT
 }
 
 void loop() {
   if (!mqttClient.connected()) reconnectToMQTT(); // Reconecta ao MQTT se desconectado
-  mqttClient.loop(); // Processa mensagens MQTT
+  mqttClient.loop(); // Mantém a conexão MQTT ativa
 }
 
 void reconnectToMQTT() {
   while (!mqttClient.connected()) {
     if (mqttClient.connect("ESP32Client", mqtt_username, mqtt_password)) {
-      mqttClient.subscribe("firmgit"); // Inscreve-se no tópico de atualização de firmware
-      mqttClient.subscribe("ledcontrol"); // Inscreve-se no tópico de controle do LED
+      mqttClient.subscribe("firmgit"); // Inscreve no tópico "firmgit"
     } else {
-      delay(5000); // Aguarda 5 segundos antes de tentar novamente
+      delay(5000); // Espera 5 segundos antes de tentar novamente
     }
   }
 }
@@ -59,43 +58,37 @@ void reconnectToMQTT() {
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String message = String((char*)payload).substring(0, length); // Converte o payload para string
   if (String(topic) == "firmgit") {
-    blinkLED(3, 500); // Pisca o LED 3 vezes para indicar atualização de firmware
-    downloadFirmware(message); // Baixa e aplica a atualização de firmware
-  } else if (String(topic) == "ledcontrol") {
-    if (message == "on") {
-      digitalWrite(ledPin, HIGH); // Liga o LED
-    } else if (message == "off") {
-      digitalWrite(ledPin, LOW); // Desliga o LED
-    }
+    blinkLED(3, 190); // Pisca o LED 3 vezes
+    downloadFirmware(message); // Faz o download do firmware
   }
 }
 
 void blinkLED(int times, int delayTime) {
   for (int i = 0; i < times; i++) {
     digitalWrite(ledPin, HIGH); // Liga o LED
-    delay(delayTime); // Aguarda
+    delay(delayTime); // Espera
     digitalWrite(ledPin, LOW); // Desliga o LED
-    delay(delayTime); // Aguarda
+    delay(delayTime); // Espera
   }
 }
 
 void downloadFirmware(const String& filename) {
-  String firmwareUrl = firmware_base_url + filename; // Constrói a URL do firmware
+  String firmwareUrl = firmware_base_url + filename; // Monta a URL do firmware
   WiFiClientSecure client;
-  client.setInsecure(); // Desabilita a verificação do certificado SSL
+  client.setInsecure(); // Configura a conexão segura como insegura
   HTTPClient http;
-  http.begin(client, firmwareUrl); // Inicializa o cliente HTTP com a URL do firmware
-  int httpCode = http.GET(); // Envia a requisição GET
+  http.begin(client, firmwareUrl); // Inicia a requisição HTTP
+  int httpCode = http.GET(); // Faz a requisição GET
 
   if (httpCode == HTTP_CODE_OK) {
     int contentLength = http.getSize(); // Obtém o tamanho do conteúdo
     if (contentLength > 0 && Update.begin(contentLength)) {
-      size_t written = Update.writeStream(*http.getStreamPtr()); // Escreve o firmware na memória flash
+      size_t written = Update.writeStream(*http.getStreamPtr()); // Escreve o firmware na memória
       if (written == contentLength && Update.end() && Update.isFinished()) {
-        blinkLED(1, 3000); // Pisca o LED para indicar atualização bem-sucedida
-        ESP.restart(); // Reinicia o ESP32
+        blinkLED(4, 190); // Pisca o LED 5 vezes
+        ESP.restart(); // Reinicia o ESP
       }
     }
   }
-  http.end(); // Encerra a conexão HTTP
+  http.end(); // Finaliza a requisição HTTP
 }
